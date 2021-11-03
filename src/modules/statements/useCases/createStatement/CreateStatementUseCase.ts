@@ -1,9 +1,9 @@
-import { inject, injectable } from "tsyringe";
+import { inject, injectable } from 'tsyringe';
 
-import { IUsersRepository } from "../../../users/repositories/IUsersRepository";
-import { IStatementsRepository } from "../../repositories/IStatementsRepository";
-import { CreateStatementError } from "./CreateStatementError";
-import { ICreateStatementDTO } from "./ICreateStatementDTO";
+import { IUsersRepository } from '../../../users/repositories/IUsersRepository';
+import { IStatementsRepository } from '../../repositories/IStatementsRepository';
+import { CreateStatementError } from './CreateStatementError';
+import { ICreateStatementDTO } from './ICreateStatementDTO';
 
 @injectable()
 export class CreateStatementUseCase {
@@ -12,21 +12,42 @@ export class CreateStatementUseCase {
     private usersRepository: IUsersRepository,
 
     @inject('StatementsRepository')
-    private statementsRepository: IStatementsRepository
+    private statementsRepository: IStatementsRepository,
   ) {}
 
-  async execute({ user_id, type, amount, description }: ICreateStatementDTO) {
+  async execute({
+    user_id,
+    type,
+    amount,
+    description,
+    sender_id,
+  }: ICreateStatementDTO) {
+    let sender;
     const user = await this.usersRepository.findById(user_id);
 
-    if(!user) {
+    if (!user) {
       throw new CreateStatementError.UserNotFound();
     }
 
-    if(type === 'withdraw') {
-      const { balance } = await this.statementsRepository.getUserBalance({ user_id });
+    if (type === 'withdraw') {
+      const { balance } = await this.statementsRepository.getUserBalance({
+        user_id,
+      });
 
       if (balance < amount) {
-        throw new CreateStatementError.InsufficientFunds()
+        throw new CreateStatementError.InsufficientFunds();
+      }
+    }
+
+    if (type === 'transfers') {
+      sender = sender_id;
+
+      const { balance } = await this.statementsRepository.getUserBalance({
+        user_id: sender_id as string,
+      });
+
+      if (balance < amount) {
+        throw new CreateStatementError.InsufficientFunds();
       }
     }
 
@@ -34,7 +55,8 @@ export class CreateStatementUseCase {
       user_id,
       type,
       amount,
-      description
+      description,
+      sender_id: sender,
     });
 
     return statementOperation;

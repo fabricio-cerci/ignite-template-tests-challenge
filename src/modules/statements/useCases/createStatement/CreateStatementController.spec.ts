@@ -8,6 +8,7 @@ import createConnection from '../../../../database';
 
 let connection: Connection;
 let id: string;
+let id2: string;
 
 describe('CreateStatementController', () => {
   beforeAll(async () => {
@@ -15,11 +16,13 @@ describe('CreateStatementController', () => {
     await connection.runMigrations();
 
     id = uuidV4();
+    id2 = uuidV4();
     const password = await hash('user123', 8);
 
     await connection.query(
       `INSERT INTO USERS(id, name, email, password) 
-      VALUES('${id}', 'test-user', 'user@finapi.com.br', '${password}')`,
+      VALUES('${id}', 'test-user', 'user@finapi.com.br', '${password}'),
+      ('${id2}', 'test-user2', 'user2@finapi.com.br', '${password}');`,
     );
   });
 
@@ -86,6 +89,40 @@ describe('CreateStatementController', () => {
     expect(type).toBe('withdraw');
   });
 
+  it('should be able to create a transfer statement with sufficient funds', async () => {
+    const responseToken = await request(app).post('/api/v1/sessions').send({
+      email: 'user@finapi.com.br',
+      password: 'user123',
+    });
+
+    const { token } = responseToken.body;
+
+    await request(app)
+      .post(`/api/v1/statements/deposit`)
+      .send({
+        amount: 100,
+        description: 'description',
+      })
+      .set({ Authorization: `Bearer ${token}` });
+
+    const response = await request(app)
+      .post(`/api/v1/statements/transfers/${id2}`)
+      .send({
+        amount: 100,
+        description: 'description transfer',
+      })
+      .set({ Authorization: `Bearer ${token}` });
+
+    const { user_id, description, amount, type, sender_id } = response.body;
+
+    expect(response.status).toBe(201);
+    expect(user_id).toBe(id2);
+    expect(sender_id).toBe(id);
+    expect(description).toBe('description transfer');
+    expect(amount).toBe(100);
+    expect(type).toBe('transfers');
+  });
+
   it('should not be able to create a withdraw statement with insufficient funds', async () => {
     const responseToken = await request(app).post('/api/v1/sessions').send({
       email: 'user@finapi.com.br',
@@ -99,6 +136,25 @@ describe('CreateStatementController', () => {
       .send({
         amount: 300,
         description: 'description withdraw',
+      })
+      .set({ Authorization: `Bearer ${token}` });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('should not be able to create a transfer statement with insufficient funds', async () => {
+    const responseToken = await request(app).post('/api/v1/sessions').send({
+      email: 'user@finapi.com.br',
+      password: 'user123',
+    });
+
+    const { token } = responseToken.body;
+
+    const response = await request(app)
+      .post(`/api/v1/statements/transfers/${id2}`)
+      .send({
+        amount: 300,
+        description: 'description transfer',
       })
       .set({ Authorization: `Bearer ${token}` });
 
